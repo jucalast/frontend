@@ -16,7 +16,7 @@ import io
 sys.path.insert(0, '../backend/src')
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 from search_summarizer.cli import main
-sys.argv = ['search_summarizer.cli', '${query}', '--max-results', '${maxResults}', '--max-pages', '${maxPages}', '--max-sentences', '${maxSentences}'${noGroq ? ' --no-groq' : ''}${verbose ? ' --verbose' : ''}]
+sys.argv = ['search_summarizer.cli', '${query}', '--max-results', '${maxResults}', '--max-pages', '${maxPages}', '--max-sentences', '${maxSentences}'${noGroq ? ' --no-groq' : ''}${verbose ? ' --verbose' : ''}, '--list-sources']
 main()
 `
     console.log('Spawning backend inline script:', scriptContent)
@@ -57,28 +57,39 @@ main()
     const summaryStart = lines.findIndex(line => line.includes('--- Resumo ---'))
     const sourcesStart = lines.findIndex(line => line.includes('Fontes utilizadas:'))
 
-    const summary = summaryStart !== -1 && sourcesStart !== -1
-      ? lines.slice(summaryStart + 1, sourcesStart).join('\n').trim()
-      : summaryStart !== -1
-      ? lines.slice(summaryStart + 1).join('\n').trim()
-      : ''
+    let summaryText = ''
+    if (summaryStart !== -1 && sourcesStart !== -1) {
+      summaryText = lines.slice(summaryStart + 1, sourcesStart).join('\n').trim()
+    } else if (summaryStart !== -1) {
+      summaryText = lines.slice(summaryStart + 1).join('\n').trim()
+    }
+
+    let structured: Record<string, any> | null = null
+    try {
+      // Try to clean JSON wrapped in markdown or code blocks
+      let cleaned = summaryText
+        .replace(/```json\s*/g, '')
+        .replace(/```\s*$/g, '')
+        .trim()
+      structured = cleaned ? JSON.parse(cleaned) : null
+    } catch (e) {
+      console.error('Failed to parse structured JSON:', e)
+    }
 
     const sources = sourcesStart !== -1
       ? lines.slice(sourcesStart + 1).filter(line => line.trim().startsWith('http'))
       : []
 
-    // Extract URLs from stderr (INFO lines) as fallback if no sources listed
+    // Extract URLs from stderr as fallback
     let fallbackSources: string[] = []
     if (sources.length === 0) {
-      const urlRegex = /https?:\/\/[^\s]+/g
+      const urlRegex = /https?:\/\/[^\s\)]+/g
       fallbackSources = result.stderr.match(urlRegex) || []
     }
-
-    const cleanSummary = summary
     const cleanSources = sources.length > 0 ? sources : fallbackSources
 
-    console.log('API route parsed:', { summary: cleanSummary, sources: cleanSources, rawOutput: result.stdout })
-    return NextResponse.json({ summary: cleanSummary, sources: cleanSources, rawOutput: result.stdout })
+    console.log('API route parsed:', { structured, sources: cleanSources, rawOutput: result.stdout })
+    return NextResponse.json({ structured, sources: cleanSources, rawOutput: result.stdout })
   } catch (err) {
     console.error('API route error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

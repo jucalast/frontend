@@ -1,9 +1,10 @@
 "use client"
 
 import { FormEvent, useState } from "react"
+import { StructuredSummary } from "@/components/StructuredSummary"
 
 type SearchResponse = {
-  summary: string
+  structured: Record<string, any> | null
   sources: string[]
   rawOutput: string
 }
@@ -90,7 +91,13 @@ export default function Home() {
             <p className="text-xs uppercase tracking-[0.5em] text-zinc-600">Resumo</p>
             <div className="mt-3 min-h-[120px] text-sm leading-relaxed">
               {data ? (
-                <p>{data.summary}</p>
+                data.structured ? (
+                  <StructuredSummary data={data.structured} />
+                ) : (
+                  <p className="text-zinc-500">
+                    Nenhuma análise estruturada foi gerada. Tente habilitar o Groq ou usar termos mais específicos.
+                  </p>
+                )
               ) : (
                 <p className="text-zinc-500">
                   Nenhum resumo ainda. Envie um termo e aguarde a mágica acontecer.
